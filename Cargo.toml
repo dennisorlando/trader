@@ -1,0 +1,14 @@
+[package]
+name = "trader"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+TASE = { version = "0.1.2", registry = "kellnr" }
+bfb = { version = "0.1.1", registry = "kellnr" }
+bose = { version = "1.0.72", registry = "kellnr" }
+doge = { version = "1.0.0", registry = "kellnr" }
+gtk = { version = "0.5.5", package = "gtk4", features = ["v4_8"] }
+market_common = { version = "1.0.10", registry = "kellnr", package = "unitn_market_2022" }
