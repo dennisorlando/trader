@@ -65,6 +65,7 @@ impl<'a> Debug for Trader<'a> {
 }
 
 impl<'a> Trader<'a> {
+
     pub fn new() -> Self {
         let mut owned_goods = HashMap::new();
         owned_goods.insert(EUR, Good::new(EUR, 1000.0));
@@ -127,6 +128,7 @@ impl<'a> Trader<'a> {
         self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).borrow().get_buy_price(kind, quantity)
     }
 
+    //todo: abort the operation if you don't have enough money. Perhaps passing the "insufficientgoodquantityerror" to the output of this function?
     pub fn buy(&mut self, market : MarketKind, kind : GoodKind, amount : f32) {
 
         let price = self.get_price_qt(market, kind, amount).expect(MARKET_NOT_FOUND_MSG(market).as_str());
@@ -162,5 +164,15 @@ impl<'a> Trader<'a> {
             .deref_mut().merge(bought_goods).expect("Couldn't add the bought goods to the trader's internal hashmap. Panic!");
 
     }
+
+    //lock_buy but with a fancier name
+    pub fn pend_order(&mut self, market : MarketKind, kind : GoodKind, amount : f32) {todo!()}
+
+    //execute all pending orders. Todo: rename this function to something fancier
+    pub fn execute_orders(&mut self, market : MarketKind, kind : GoodKind, amount : f32) {todo!()}
+
+    //"cashout" all the owned goods, aka sell all the goods to the markets for euros. We'll automatically sell the goods to the highest bidder,
+    //in order to not fuzz the trader with this "paesant" stuff
+    pub fn cashout(&mut self) {todo!()}
 
 }
