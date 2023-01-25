@@ -2,8 +2,8 @@ pub mod trader;
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Borrow;
-    use std::cell::RefCell;
+    
+    
     use std::rc::Rc;
 
     use bfb::bfb_market::Bfb;
