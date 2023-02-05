@@ -1,2 +1,6 @@
 /target
 /Cargo.lock
+*.log
+log_*.txt
+tase.txt
+.idea/
