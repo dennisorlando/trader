@@ -1,5 +1,3 @@
-#![feature(try_trait_v2)]
-
 pub mod trader;
 
 #[cfg(test)]
@@ -33,7 +31,7 @@ mod tests {
                 let price = trader.get_demand_price(BFB, YUAN);
                 println!("Price {}: {}", i, price);
 
-                trader.sell(BFB, YUAN, 0.01);
+                trader.sell(BFB, YUAN, 0.01).expect("Example trader does not successed");
 
                 let price = trader.get_demand_price(BFB, YUAN);
 

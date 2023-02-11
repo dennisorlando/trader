@@ -1,5 +1,3 @@
-
-
 use market_common::market::{BuyError, LockBuyError, LockSellError, SellError};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

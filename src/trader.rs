@@ -1,13 +1,11 @@
 mod trader_fancy_prints;
 pub mod trader_errors;
 
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
-use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::ops::{Deref, DerefMut};
 
+use std::fs::File;
 use std::rc::Rc;
 use colored::Colorize;
 
@@ -15,8 +13,10 @@ use market_common::good::good::Good;
 
 use market_common::good::good_kind::GoodKind;
 use market_common::good::good_kind::GoodKind::*;
+use market_common::market::good_label::GoodLabel;
 use market_common::market::{Market, MarketGetterError};
 use market_common::wait_one_day;
+use std::io::Write;
 use crate::trader::MarketKind::{BFB, DOGE, PANIC};
 use crate::trader::trader_errors::{TraderDemandError, TraderSupplyError};
 
@@ -26,7 +26,7 @@ static MARKET_NOT_FOUND_MSG: fn(MarketKind) -> String = |market : MarketKind| {
     format!("Market \"{:?}\" not found!", market).red().to_string()
 };
 static DEFAULT_TRANSACTION_AMOUNT : f32 = 1000.0;
-
+static INFINITY: f32 = 1_000_000.;
 
 //this enum is utterly specific for our implementation and can't be generalized. Bad!
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,6 +54,9 @@ pub struct Trader {
     //This is a very important and crucial field. It determines whether the trader gets free money after each transaction or not.
     amazingness: f32,
 
+    // DATA for visualizer
+    pub data: Vec<Vec<HashMap<GoodKind, Vec<f32>>>>,
+    pub liquidity: HashMap<GoodKind, Vec<f32>>
 }
 
 impl Debug for Trader {
@@ -77,7 +80,62 @@ impl Debug for Trader {
     }
 }
 
+impl Drop for Trader {
+    fn drop(&mut self) {
+        println!("{:?}", self.liquidity);
+        // Save data to file
+        let file = File::create("visualizer_data.txt");
+
+        match file {
+            Ok(mut file) => {
+
+                let serialized_data = serde_json::to_string(&self.data);
+                match serialized_data {
+                    Ok(data) => {
+                        write!(file, "{}", data).expect("The trader experienced an internal error while writing to \"visualizer_data.txt\".");
+                    }
+                    Err(e) => {
+                        println!("{}", e.to_string());
+                        println!("TRADER: couldn't serialize the data. The last state was NOT recorded to \"visualizer_data.txt\"");
+                    }
+                }
+
+            }
+            Err(e) => {
+                println!("TRADER: couldn't open \"visualizer_data.txt\" because of one out of various reasons. Stacktrace:");
+                println!("{}", e.to_string());
+            }
+        }
+    }
+}
+
 impl Trader {
+
+    fn initialize_data(&mut self, _market: &Rc<RefCell<dyn Market>>)  {
+        let mut res = Vec::new();
+        let h: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        res.push(h); // sell
+        let h: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        res.push(h); // buy
+        for op in res.iter_mut() {
+            // op.insert(GoodKind::EUR, Vec::new());
+            op.insert(GoodKind::USD, Vec::new());
+            op.insert(GoodKind::YEN, Vec::new());
+            op.insert(GoodKind::YUAN, Vec::new());
+        }
+        let h: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        res.push(h); // liquidity
+        
+        {
+            let op = res.get_mut(2).unwrap();
+            op.insert(GoodKind::EUR, Vec::new());
+            op.insert(GoodKind::USD, Vec::new());
+            op.insert(GoodKind::YEN, Vec::new());
+            op.insert(GoodKind::YUAN, Vec::new());
+        }
+        
+        self.data.push(res);
+    }
 
     pub fn new() -> Self {
         let mut owned_goods = HashMap::new();
@@ -85,6 +143,11 @@ impl Trader {
         owned_goods.insert(USD, Good::new(USD, 0.0));
         owned_goods.insert(YEN,  Good::new(YEN, 0.0));
         owned_goods.insert(YUAN, Good::new(YUAN, 0.0));
+
+        let mut liq: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        for (gk, _) in owned_goods.iter() {
+            liq.insert(*gk, Vec::new());
+        }
 
         Trader {
             closure: Box::new(|_| {}),
@@ -94,6 +157,8 @@ impl Trader {
             pending_buy_orders: Vec::new(),
             pending_sell_orders: Vec::new(),
             amazingness: 1.0,
+            data: Vec::new(),
+            liquidity: liq 
         }
     }
 
@@ -104,6 +169,11 @@ impl Trader {
         owned_goods.insert(YEN, Good::new(YEN, 0.0));
         owned_goods.insert(YUAN, Good::new(YUAN, 0.0));
 
+        let mut liq: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        for (gk, _) in owned_goods.iter() {
+            liq.insert(*gk, Vec::new());
+        }
+
         Trader {
             closure: Box::new(|_| {}),
             closure_just_modified: false,
@@ -112,10 +182,13 @@ impl Trader {
             pending_buy_orders: Vec::new(),
             pending_sell_orders: Vec::new(),
             amazingness,
+            data: Vec::new(),
+            liquidity: liq 
         }
     }
 
     pub fn with_market(mut self, kind: MarketKind, market: Rc<RefCell<dyn Market>>) -> Self {
+        self.initialize_data(&market);
         self.markets.insert(kind, market);
         self
     }
@@ -157,6 +230,42 @@ impl Trader {
         }
     }
 
+    fn save_data(&mut self) {
+        let ordered_markets = vec![MarketKind::BFB, MarketKind::BOSE, MarketKind::DOGE];
+        for (market_index, m) in ordered_markets.iter().enumerate() {
+            let market = self.markets.get(m).unwrap();
+            for (kind, _) in self.owned_goods.iter() {
+                if *kind == EUR {
+                    continue;
+                }
+                // SELL
+                let quantity = 0.01;
+                let price = match market.borrow().get_sell_price(*kind, quantity) {
+                    Ok(p) => p/quantity,
+                    Err(_) => INFINITY
+                };
+                self.data.get_mut(market_index).unwrap().get_mut(1).unwrap().get_mut(&kind).unwrap().push(price);
+
+                // BUY
+                let quantity = 0.01;
+                let price = match market.borrow().get_buy_price(*kind, quantity) {
+                    Ok(p) => p/quantity,
+                    Err(_) => INFINITY
+                };
+                self.data.get_mut(market_index).unwrap().get_mut(0).unwrap().get_mut(&kind).unwrap().push(price);
+            }
+
+            for GoodLabel {good_kind, quantity, ..} in market.borrow().get_goods() {
+                // LIQUIDITY
+                self.data.get_mut(market_index).unwrap().get_mut(2).unwrap().get_mut(&good_kind).unwrap().push(quantity);
+            }
+        }
+
+        // Trader good quantities
+        for (gk, good) in self.owned_goods.iter() {
+            self.liquidity.get_mut(gk).expect("Liquidity data lost something").push(good.get_qty());
+        }
+    }
 
     pub fn set_strategy(&mut self, function: impl Fn(&mut Trader) + 'static) {
         self.closure = Box::new(function);
@@ -169,7 +278,7 @@ impl Trader {
 
     //I (Dennis) renamed "buy" to "supply" because I was getting crazy in distinguishing between "buy" and "sell"
     pub fn get_supply_price(&self, market : MarketKind, kind : GoodKind) -> Result<f32, TraderSupplyError> {
-        match self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).deref().borrow().get_buy_price(kind, DEFAULT_TRANSACTION_AMOUNT) {
+        match self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).borrow().get_buy_price(kind, DEFAULT_TRANSACTION_AMOUNT) {
             Ok(price) => Ok(price),
             Err(e) => {
                 match e {
@@ -181,7 +290,7 @@ impl Trader {
     }
 
     pub fn get_supply_price_qt(&self, market : MarketKind, kind : GoodKind, quantity : f32) -> Result<f32, TraderSupplyError> {
-        match self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).deref().borrow().get_buy_price(kind, quantity) {
+        match self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).borrow().get_buy_price(kind, quantity) {
             Ok(price) => Ok(price),
             Err(e) => {
                 match e {
@@ -194,7 +303,7 @@ impl Trader {
     }
 
     pub fn print_market(&self, market : MarketKind) {
-        let goods = self.get_market(market).unwrap().deref().borrow().get_goods();
+        let goods = self.get_market(market).unwrap().borrow().get_goods();
         println!("\n{:?}", market);
         goods.iter().for_each(|g| {
             println!("{:?}: {}", g.good_kind, g.quantity);
@@ -205,12 +314,12 @@ impl Trader {
 
     //ai generated, should be fine
     pub fn get_demand_price(&self, market : MarketKind, kind : GoodKind) -> f32 {
-        self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).deref().borrow().get_sell_price(kind, DEFAULT_TRANSACTION_AMOUNT)
+        self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).borrow().get_sell_price(kind, DEFAULT_TRANSACTION_AMOUNT)
             .expect(format!("Couldn't get sell price for {} in market {:?}", kind, market).as_str())
     }
     //ai generated, should be fine
     pub fn get_demand_price_qt(&self, market : MarketKind, kind : GoodKind, quantity : f32) -> f32 {
-        self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).deref().borrow().get_sell_price(kind, quantity)
+        self.markets.get(&market).expect(MARKET_NOT_FOUND_MSG(market).as_str()).borrow().get_sell_price(kind, quantity)
             .expect(format!("Couldn't get sell price for {} in market {:?}", kind, market).as_str())
     }
 
@@ -220,19 +329,42 @@ impl Trader {
 
         let price = self.get_supply_price_qt(market, kind, amount)?;
 
-        let token = self.get_market(market)?.deref().borrow_mut()
+        let token = self.get_market(market)?.borrow_mut()
             .lock_buy(kind, amount, price, TRADER_NAME.to_string())?;
 
-        let bought_goods = self.get_market(market)?.deref().borrow_mut().buy(token, self.owned_goods.get_mut(&EUR).unwrap())?;
+        let bought_goods = self.get_market(market)?.borrow_mut().buy(token, self.owned_goods.get_mut(&EUR).unwrap())?;
 
         //save value because the goods will lose ownership
         let value = bought_goods.get_qty();
 
         self.owned_goods.get_mut(&kind).expect(format!("{} disappeard from the trader's internal hashmap. Panic!", kind).as_str())
-            .deref_mut().merge(bought_goods).expect("Couldn't add the bought goods to the trader's internal hashmap. Panic!");
+            .merge(bought_goods).expect("Couldn't add the bought goods to the trader's internal hashmap. Panic!");
+
+        self.save_data();
 
         Ok(value)
+    }
 
+    pub fn lock_without_buying(&mut self, market : MarketKind, kind : GoodKind, amount : f32) -> Result<(String, f32), TraderSupplyError> {
+
+        let price = self.get_supply_price_qt(market, kind, amount)?;
+
+        let token = self.get_market(market)?.borrow_mut()
+            .lock_buy(kind, amount, price, TRADER_NAME.to_string())?;
+        self.save_data();
+
+        Ok((token, price))
+    }
+
+    pub fn lock_without_selling(&mut self, market : MarketKind, kind : GoodKind, amount : f32) -> Result<(String, f32), TraderDemandError> {
+
+        let price = self.get_demand_price_qt(market, kind, amount);
+
+        let token = self.get_market(market)?.borrow_mut()
+            .lock_sell(kind, amount, price, TRADER_NAME.to_string())?;
+        self.save_data();
+
+        Ok((token, price))
     }
 
     pub fn get_market(&self, market : MarketKind) -> Result<Rc<RefCell<dyn Market>>, TraderSupplyError> {
@@ -247,28 +379,30 @@ impl Trader {
         let price = self.get_demand_price_qt(market, kind, amount);
 
         let token = self.get_market(market)?
-            .deref().borrow_mut()
+            .borrow_mut()
             .lock_sell(kind, amount, price, TRADER_NAME.to_string())?;
 
         let sold_goods = self.get_market(market)?
-            .deref().borrow_mut()
+            .borrow_mut()
             .sell(token, self.owned_goods.get_mut(&kind).expect(format!("Trader has no {}", kind).as_str()))?;
         let value = sold_goods.get_qty();
 
         self.owned_goods.get_mut(&EUR).expect(format!("{} disappeard from the trader's internal hashmap. Panic!", kind).as_str())
-            .deref_mut().merge(sold_goods).expect("Couldn't add the sold goods to the trader's internal hashmap. Panic!");
-
+            .merge(sold_goods).expect("Couldn't add the sold goods to the trader's internal hashmap. Panic!");
+        
+        self.save_data();
         Ok(value)
-
     }
 
     pub fn wait(&mut self){
-        self.markets.values().for_each(|m| wait_one_day!(m.deref().borrow_mut()));
+        self.markets.values().for_each(|m| wait_one_day!(m));
+        self.save_data();
     }
 
     pub fn wait_for(&mut self, days : u32){
         for _ in 0..days {
             self.wait();
+            self.save_data();
         }
     }
 
@@ -367,6 +501,7 @@ impl Trader {
      */
 
     //"cashout" all the owned goods, aka sell all the goods to the markets for euros. We'll automatically sell the goods to the highest bidder.
+    // UNFINISHED
     pub fn bailout(&mut self) {
         self.get_goods().iter().for_each(|g| {
 
@@ -383,6 +518,8 @@ impl Trader {
             }
 
         });
+
+        todo!()
     }
 
     pub fn get_goods(&mut self) -> Vec<Good> {
@@ -412,7 +549,7 @@ impl Trader {
             if marketkind == &BFB {
                 return;
             }
-            if market.deref().borrow().get_buy_price(kind, DEFAULT_TRANSACTION_AMOUNT).unwrap() < lowest_price {
+            if market.borrow().get_buy_price(kind, DEFAULT_TRANSACTION_AMOUNT).unwrap() < lowest_price {
                 cheapest_supplier = *marketkind;
             }
         });
@@ -429,7 +566,7 @@ impl Trader {
         let mut cheapest_supplier = DOGE;
         let lowest_price = f32::MAX;
         self.markets.iter().for_each(|(marketkind, market)| {
-            if market.deref().borrow().get_buy_price(kind, quantity).unwrap() < lowest_price {
+            if market.borrow().get_buy_price(kind, quantity).unwrap() < lowest_price {
                 cheapest_supplier = *marketkind;
             }
         });
@@ -447,7 +584,7 @@ impl Trader {
             let mut best_buyer = DOGE;
             let highest_price = f32::MIN;
             self.markets.iter().for_each(|(marketkind, market)| {
-                if market.deref().borrow().get_sell_price(kind, DEFAULT_TRANSACTION_AMOUNT).unwrap() > highest_price {
+                if market.borrow().get_sell_price(kind, DEFAULT_TRANSACTION_AMOUNT).unwrap() > highest_price {
                     best_buyer = *marketkind;
                 }
             });
@@ -464,8 +601,8 @@ impl Trader {
             let mut best_buyer = PANIC;
             let mut highest_price = f32::MIN;
             self.markets.iter().for_each(|(marketkind, market)| {
-                let price = market.deref().borrow().get_sell_price(kind, quantity).unwrap();
-                if price > highest_price && market.deref().borrow().get_budget() > price {
+                let price = market.borrow().get_sell_price(kind, quantity).unwrap();
+                if price > highest_price && market.borrow().get_budget() > price {
                     best_buyer = *marketkind;
                     highest_price = price;
                 }
@@ -484,7 +621,7 @@ impl Trader {
 
         match market {
             Ok(m) => {
-                m.deref().borrow().get_goods()
+                m.borrow().get_goods()
                     .iter().for_each(|g| if g.good_kind == kind { quantity = g.quantity });
                 quantity
             }
