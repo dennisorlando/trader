@@ -116,9 +116,17 @@ impl Trader {
         res.push(h); // sell
         let h: HashMap<GoodKind, Vec<f32>> = HashMap::new();
         res.push(h); // buy
+        for op in res.iter_mut() {
+            // op.insert(GoodKind::EUR, Vec::new());
+            op.insert(GoodKind::USD, Vec::new());
+            op.insert(GoodKind::YEN, Vec::new());
+            op.insert(GoodKind::YUAN, Vec::new());
+        }
         let h: HashMap<GoodKind, Vec<f32>> = HashMap::new();
         res.push(h); // liquidity
-        for op in res.iter_mut() {
+        
+        {
+            let op = res.get_mut(2).unwrap();
             op.insert(GoodKind::EUR, Vec::new());
             op.insert(GoodKind::USD, Vec::new());
             op.insert(GoodKind::YEN, Vec::new());
@@ -210,10 +218,13 @@ impl Trader {
     }
 
     fn save_data(&mut self) {
-        let ordered_markets = vec![MarketKind::BOSE, MarketKind::DOGE, MarketKind::BFB];
+        let ordered_markets = vec![MarketKind::BFB, MarketKind::BOSE, MarketKind::DOGE];
         for (market_index, m) in ordered_markets.iter().enumerate() {
             let market = self.markets.get(m).unwrap();
             for (kind, _) in self.owned_goods.iter() {
+                if *kind == EUR {
+                    continue;
+                }
                 // SELL
                 let quantity = 0.01;
                 let price = match market.borrow().get_sell_price(*kind, quantity) {
