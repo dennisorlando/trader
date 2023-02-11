@@ -3,7 +3,7 @@ use bfb::bfb_market::Bfb;
 use bose::market::BoseMarket;
 use dogemarket::dogemarket::DogeMarket;
 use market_common::{good::good_kind::GoodKind::{self, EUR}, market::{good_label::GoodLabel, Market}};
-use fancy_trader::trader::{Trader, MarketKind};
+use trader::trader::{Trader, MarketKind};
 
 
 fn main() {
@@ -141,6 +141,7 @@ fn strategy(trader: &mut Trader) {
 
 
     println!("I have {} {}", trader.get_owned_good_qty(kind), kind);
+    trader.wait_for(3);
 }
 
 fn find_accepted_sell_qty(_trader: &mut Trader, market: &Rc<RefCell<dyn Market>>, kind: GoodKind, initial_quantity: f32) -> f32 {

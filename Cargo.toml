@@ -1,6 +1,6 @@
 [package]
-name = "fancy_trader"
-version = "0.1.0"
+name = "trader"
+version = "0.2.0"
 edition = "2021"
 
 

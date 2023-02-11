@@ -82,6 +82,7 @@ impl Debug for Trader {
 
 impl Drop for Trader {
     fn drop(&mut self) {
+        println!("{:?}", self.liquidity);
         // Save data to file
         let file = File::create("visualizer_data.txt");
 
