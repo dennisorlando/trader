@@ -11,3 +11,4 @@ bose = { version = "1.0.75", registry = "kellnr" }
 colored = "2.0.0"
 doge = { version = "1.0.1", registry = "kellnr" }
 market_common = { version = "1.0.10", registry = "kellnr", package = "unitn_market_2022" }
+serde_json = "1.0"
