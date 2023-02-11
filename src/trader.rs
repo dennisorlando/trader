@@ -56,7 +56,7 @@ pub struct Trader {
     amazingness: f32,
 
     // DATA for visualizer
-    data: Vec<Vec<HashMap<GoodKind, Vec<f32>>>> 
+    pub data: Vec<Vec<HashMap<GoodKind, Vec<f32>>>> 
 }
 
 impl Debug for Trader {

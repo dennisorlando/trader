@@ -1,10 +1,10 @@
 use std::{collections::HashMap, cmp::Ordering, cell::RefCell, rc::Rc};
-
 use bfb::bfb_market::Bfb;
 use bose::market::BoseMarket;
 use dogemarket::dogemarket::DogeMarket;
 use market_common::{good::good_kind::GoodKind::{self, EUR}, market::{good_label::GoodLabel, Market}};
-use trader::trader::{Trader, MarketKind};
+use Fancy_Trader::trader::{Trader, MarketKind};
+
 
 fn main() {
     let bose = BoseMarket::new_random();
@@ -22,6 +22,11 @@ fn main() {
     trader.run(1);
 
     println!("{:#?}", trader);
+
+    
+
+    // Call the visualizer
+    gtk_plotter::gtk_plotter(trader.data.clone());
 }
 
 
