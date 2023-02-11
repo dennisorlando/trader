@@ -3,7 +3,7 @@ use bfb::bfb_market::Bfb;
 use bose::market::BoseMarket;
 use dogemarket::dogemarket::DogeMarket;
 use market_common::{good::good_kind::GoodKind::{self, EUR}, market::{good_label::GoodLabel, Market}};
-use Fancy_Trader::trader::{Trader, MarketKind};
+use fancy_trader::trader::{Trader, MarketKind};
 
 
 fn main() {
@@ -26,7 +26,9 @@ fn main() {
     
 
     // Call the visualizer
-    gtk_plotter::gtk_plotter(trader.data.clone());
+    let data = Rc::new(trader.data.clone());
+    let liq = Rc::new(trader.liquidity.clone());
+    gtk_plotter::gtk_plotter(data, liq);
 }
 
 

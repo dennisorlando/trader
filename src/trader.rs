@@ -3,7 +3,6 @@ pub mod trader_errors;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::f32::INFINITY;
 use std::fmt::{Debug, Formatter};
 
 use std::fs::File;
@@ -27,7 +26,7 @@ static MARKET_NOT_FOUND_MSG: fn(MarketKind) -> String = |market : MarketKind| {
     format!("Market \"{:?}\" not found!", market).red().to_string()
 };
 static DEFAULT_TRANSACTION_AMOUNT : f32 = 1000.0;
-
+static INFINITY: f32 = 1_000_000.;
 
 //this enum is utterly specific for our implementation and can't be generalized. Bad!
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,7 +55,8 @@ pub struct Trader {
     amazingness: f32,
 
     // DATA for visualizer
-    pub data: Vec<Vec<HashMap<GoodKind, Vec<f32>>>> 
+    pub data: Vec<Vec<HashMap<GoodKind, Vec<f32>>>>,
+    pub liquidity: HashMap<GoodKind, Vec<f32>>
 }
 
 impl Debug for Trader {
@@ -143,6 +143,11 @@ impl Trader {
         owned_goods.insert(YEN,  Good::new(YEN, 0.0));
         owned_goods.insert(YUAN, Good::new(YUAN, 0.0));
 
+        let mut liq: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        for (gk, _) in owned_goods.iter() {
+            liq.insert(*gk, Vec::new());
+        }
+
         Trader {
             closure: Box::new(|_| {}),
             closure_just_modified: false,
@@ -151,7 +156,8 @@ impl Trader {
             pending_buy_orders: Vec::new(),
             pending_sell_orders: Vec::new(),
             amazingness: 1.0,
-            data: Vec::new()
+            data: Vec::new(),
+            liquidity: liq 
         }
     }
 
@@ -162,6 +168,11 @@ impl Trader {
         owned_goods.insert(YEN, Good::new(YEN, 0.0));
         owned_goods.insert(YUAN, Good::new(YUAN, 0.0));
 
+        let mut liq: HashMap<GoodKind, Vec<f32>> = HashMap::new();
+        for (gk, _) in owned_goods.iter() {
+            liq.insert(*gk, Vec::new());
+        }
+
         Trader {
             closure: Box::new(|_| {}),
             closure_just_modified: false,
@@ -170,7 +181,8 @@ impl Trader {
             pending_buy_orders: Vec::new(),
             pending_sell_orders: Vec::new(),
             amazingness,
-            data: Vec::new()
+            data: Vec::new(),
+            liquidity: liq 
         }
     }
 
@@ -246,6 +258,11 @@ impl Trader {
                 // LIQUIDITY
                 self.data.get_mut(market_index).unwrap().get_mut(2).unwrap().get_mut(&good_kind).unwrap().push(quantity);
             }
+        }
+
+        // Trader good quantities
+        for (gk, good) in self.owned_goods.iter() {
+            self.liquidity.get_mut(gk).expect("Liquidity data lost something").push(good.get_qty());
         }
     }
 
